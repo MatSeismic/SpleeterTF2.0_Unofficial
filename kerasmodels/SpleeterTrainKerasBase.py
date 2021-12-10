@@ -170,10 +170,9 @@ def trainClusteredModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal
 		verbose=1)
 
 	final_model = tfmot.clustering.keras.strip_clustering(clustered_model)
-	model.save('./clustered_model')
+	final_model.save('./clustered_model')
 
-
-	print(100)
+	return final_model
 
 
 def trainModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, modelPath=None, learningRate=0):
@@ -226,6 +225,8 @@ def trainModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, model
 		verbose=1)
 
 	print(100)
+
+	return model
 
 def trainPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, modelPath=None, learningRate=0):
 
@@ -294,3 +295,5 @@ def trainPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0,
 		verbose=1)
 
 	print(100)
+
+	return model_for_pruning
