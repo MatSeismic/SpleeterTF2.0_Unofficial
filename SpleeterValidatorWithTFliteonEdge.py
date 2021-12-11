@@ -1,10 +1,11 @@
 from librosa import istft, stft
 from scipy.signal.windows import hann
-from tensorflow.python.keras.layers import Multiply
+# from tensorflow.python.keras.layers import Multiply
 
 from audio.adapter import get_audio_adapter
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 
 from utils.tensor import pad_and_partition
 import os
@@ -15,12 +16,12 @@ import time
 
 import pdb
 
-model_dir = './spleeter_saved_model_dir/5000_3112/'  # location of the model
+#model_dir = './spleeter_saved_model_dir/5000_3112/'  # location of the model
 # model_dir = 'F:\\trainedSpleeterModels\\models\\vocal_clustered_16_10\\'  # location of the model
-# model_dir = 'F:\\gitrepos\\spleeter-tflite-convert\\export_dir\\2stem\\'
+model_dir = 'F:\\trainedSpleeterModels\\tflite_models\\'
 
 input_audio_file = './input/AClassicEducation.wav' # location of the input file
-output_destination = './output/' #location of the output destination
+output_destination = './tempoutputs/' #location of the output destination
 
 #To ensure the processing are happenning properly, output prediction values of official spleeter model have been saved as npy file here and is being used here
 #run this file with 'sampleRunToValidateProcessingFlag' as 'True' to check the processing.
@@ -84,12 +85,13 @@ def _extend_mask( mask):
     # Extend with average
     # (dispatch according to energy in the processed band)
     if extension == "average":
-        extension_row = tf.reduce_mean(mask, axis=2, keepdims=True)
+        # extension_row = tf.reduce_mean(mask, axis=2, keepdims=True)
+        extension_row = np.mean(mask, axis=2)
     # Extend with 0
     # (avoid extension artifacts but not conservative separation)
     elif extension == "zeros":
-        mask_shape = tf.shape(mask)
-        extension_row = tf.zeros((
+        mask_shape = np.shape(mask)
+        extension_row = np.zeros((
             mask_shape[0],
             mask_shape[1],
             1,
@@ -97,16 +99,21 @@ def _extend_mask( mask):
     else:
         raise ValueError(f'Invalid mask_extension parameter {extension}')
     n_extra_row = _frame_length // 2 + 1 - _F
-    extension = tf.tile(extension_row, [1, 1, n_extra_row, 1])
-    return tf.concat([mask, extension], axis=2)
+    # extension = tf.tile(extension_row, [1, 1, n_extra_row, 1])
+    extension = np.tile(extension_row, (1, 1, n_extra_row, 1))
+    # return tf.concat([mask, extension], axis=2)
+    # pdb.set_trace()
+    return np.concatenate((mask, extension), axis=2)
 
 
 def maskOutput(output_dict, stft_val):
     separation_exponent = 2
-    output_sum = tf.reduce_sum(
-        [e ** separation_exponent for e in output_dict.values()],
-        axis=0
-    ) + 1e-10
+    # output_sum = tf.reduce_sum(
+    #     [e ** separation_exponent for e in output_dict.values()],
+    #     axis=0
+    # ) + 1e-10
+
+    output_sum = np.sum([e ** separation_exponent for e in output_dict.values()], axis=0) + 1e-10
     out = {}
     for instrument in _instruments:
         output = output_dict[f'{instrument}_spectrogram']
@@ -116,21 +123,26 @@ def maskOutput(output_dict, stft_val):
         # Extend mask;
         instrument_mask = _extend_mask(instrument_mask)
         # Stack back mask.
-        old_shape = tf.shape(instrument_mask)
-        new_shape = tf.concat(
-            [[old_shape[0] * old_shape[1]], old_shape[2:]],
-            axis=0)
-        instrument_mask = tf.reshape(instrument_mask, new_shape)
+        # old_shape = tf.shape(instrument_mask)
+        old_shape = np.shape(instrument_mask)
+        # new_shape = tf.concat(
+        #     [[old_shape[0] * old_shape[1]], old_shape[2:]],
+        #     axis=0)
+        new_shape = np.concatenate(([old_shape[0] * old_shape[1]], old_shape[2:]), axis=0)
+        # instrument_mask = tf.reshape(instrument_mask, new_shape)
+        instrument_mask = np.reshape(instrument_mask, new_shape)
         # Remove padded part (for mask having the same size as STFT);
 
         instrument_mask = instrument_mask[
-                          :tf.shape(stft_val)[0], ...]
+                          :np.shape(stft_val)[0], ...]
         out[f'{instrument}_spectrogram'] = instrument_mask
 
     for instrument, mask in out.items():
-        out[instrument] = tf.cast(mask, dtype=tf.complex64) * stft_val  # --> updating code locally
+        # out[instrument] = tf.cast(mask, dtype=tf.complex64) * stft_val  # --> updating code locally
+        out[instrument] = mask.astype(np.complex64) * stft_val  # --> updating code locally
         print(instrument)
-        print(tf.reduce_sum(out[instrument]))
+        # print(tf.reduce_sum(out[instrument]))
+        print(np.sum(out[instrument]))
         #out[instrument] = tf.cast(mask, dtype=tf.complex64)
 
     return out
@@ -213,18 +225,34 @@ def separate(waveform, audio_descriptor):
     elif stft_val.shape[-1] > 2:
         stft_val = stft_val[:, :2]
 
-    spectrogram = tf.abs(pad_and_partition(stft_val, 512))[:,:,:1024,:]
+    # spectrogram = tf.abs(pad_and_partition(stft_val, 512))[:,:,:1024,:]
+    spectrogram = np.abs(pad_and_partition(stft_val, 512))[:,:,:1024,:]
 
     preds = {}
 
+    # for instrument in _instruments:
+    #     predict_model = tf.saved_model.load(model_dir + instrument)
+    #     inference_func = predict_model.signatures["serving_default"]
+    #     predictions = inference_func(spectrogram)
+    #     preds[f'{instrument}_spectrogram'] = predictions[instrument]
+    #     if(sampleRunToValidateProcessingFlag):
+    #         preds[f'{instrument}_spectrogram'] = predValuesFromOfficialSpleeter
+
     for instrument in _instruments:
-        predict_model = tf.saved_model.load(model_dir + instrument)
+        interpreter = tflite.Interpreter(model_dir + instrument+'.tflite')
         # pdb.set_trace()
-        inference_func = predict_model.signatures["serving_default"]
-        predictions = inference_func(spectrogram)
-        # pdb.set_trace()
-        preds[f'{instrument}_spectrogram'] = predictions[instrument]
-        # preds[f'{instrument}_spectrogram'] = predictions[f'{instrument}_spectrogram']
+        interpreter.allocate_tensors()
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        interpreter.set_tensor(input_details[0]['index'], spectrogram)
+        interpreter.invoke()
+        # The function `get_tensor()` returns a copy of the tensor data.
+        # Use `tensor()` in order to get a pointer to the tensor.
+        prediction = interpreter.get_tensor(output_details[0]['index'])
+
+        # inference_func = interpreter.get_signature_runner("serving_default")
+        # predictions = inference_func(spectrogram)
+        preds[f'{instrument}_spectrogram'] = prediction
         if(sampleRunToValidateProcessingFlag):
             preds[f'{instrument}_spectrogram'] = predValuesFromOfficialSpleeter
 
