@@ -297,3 +297,70 @@ def trainPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0,
 	print(100)
 
 	return model_for_pruning
+
+def trainQATModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, modelPath=None, learningRate=0):
+
+	global opt
+	if(learningRate==0):
+		learningRate = INIT_LR
+	# if there is no specific model checkpoint supplied, then initialize
+	# the network and compile the model
+	if modelPath is None:
+		print("[INFO] compiling model...")
+		model = getUnetModel("vocals")
+		model.compile(loss=custom_loss, optimizer=opt,
+			metrics=[dice_coefficient])
+	# otherwise, we're using a checkpoint model
+	else:
+		# load the checkpoint from disk
+		print("[INFO] loading {}...".format(modelPath))
+		model = load_model(modelPath, custom_objects={"loss":custom_loss, "metrics":dice_coefficient}, compile=False)
+		model.compile(loss=custom_loss, optimizer=opt,
+					  metrics=[dice_coefficient])
+
+		K.set_value(model.optimizer.lr, learningRate)
+		print("[INFO] new learning rate: {}".format(
+			K.get_value(model.optimizer.lr)))
+
+	def apply_quantization_to_dense(layer):
+		if isinstance(layer, tf.keras.layers.Conv2D):
+			return tfmot.quantization.keras.quantize_annotate_layer(layer)
+		return layer
+
+	annotated_model = tf.keras.models.clone_model(
+		model,
+		clone_function=apply_quantization_to_dense,
+	)
+
+	quant_aware_model = tfmot.quantization.keras.quantize_apply(annotated_model)
+	quant_aware_model.summary()
+
+
+	# build the path to the training plot and training history
+	plotPath = "./kerasmodels/plots/resnet_fashion_mnist.png"
+	jsonPath = "./kerasmodels/plots/resnet_fashion_mnist.json"
+
+	log_dir = tempfile.mkdtemp()
+	# construct the set of callbacks
+	callbacks = [
+		EpochCheckpoint(checkPointPath, every=saveModelEvery,
+			startAt=startEpochVal),
+		TrainingMonitor(plotPath,
+			jsonPath=jsonPath,
+			startAt=startEpochVal)]
+
+
+	input_ds = get_training_dataset(params, audio_adapter, audio_path )
+	test_ds = get_validation_dataset(params, audio_adapter, audio_path)
+
+	quant_aware_model.fit_generator(
+		input_ds,
+		validation_data=test_ds,
+		steps_per_epoch=64,
+		epochs=noOfEpochs,
+		callbacks=callbacks,
+		verbose=1)
+
+	print(100)
+
+	return model_for_pruning
