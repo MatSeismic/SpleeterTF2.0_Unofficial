@@ -335,6 +335,9 @@ def trainQATModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, mo
 	quant_aware_model = tfmot.quantization.keras.quantize_apply(annotated_model)
 	quant_aware_model.summary()
 
+	quant_aware_model.compile(loss=custom_loss, optimizer=opt,
+					  metrics=[dice_coefficient])
+
 
 	# build the path to the training plot and training history
 	plotPath = "./kerasmodels/plots/resnet_fashion_mnist.png"
