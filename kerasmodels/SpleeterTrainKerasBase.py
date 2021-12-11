@@ -363,4 +363,4 @@ def trainQATModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, mo
 
 	print(100)
 
-	return model_for_pruning
+	return quant_aware_model
