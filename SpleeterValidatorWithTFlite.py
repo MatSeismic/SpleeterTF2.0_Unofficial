@@ -13,11 +13,14 @@ from os.path import basename, join, splitext, dirname
 from multiprocessing import Pool
 import time
 
+import pdb
+
 #model_dir = './spleeter_saved_model_dir/5000_3112/'  # location of the model
-model_dir = 'F:\\trainedSpleeterModels\\models\\vocal_clustered_16_10\\'  # location of the model
+# model_dir = 'F:\\trainedSpleeterModels\\models\\vocal_clustered_16_10\\'  # location of the model
+model_dir = 'F:\\trainedSpleeterModels\\tflite_models\\'
 
 input_audio_file = './input/AClassicEducation.wav' # location of the input file
-output_destination = './output/' #location of the output destination
+output_destination = './tempoutputs/' #location of the output destination
 
 #To ensure the processing are happenning properly, output prediction values of official spleeter model have been saved as npy file here and is being used here
 #run this file with 'sampleRunToValidateProcessingFlag' as 'True' to check the processing.
@@ -214,11 +217,29 @@ def separate(waveform, audio_descriptor):
 
     preds = {}
 
+    # for instrument in _instruments:
+    #     predict_model = tf.saved_model.load(model_dir + instrument)
+    #     inference_func = predict_model.signatures["serving_default"]
+    #     predictions = inference_func(spectrogram)
+    #     preds[f'{instrument}_spectrogram'] = predictions[instrument]
+    #     if(sampleRunToValidateProcessingFlag):
+    #         preds[f'{instrument}_spectrogram'] = predValuesFromOfficialSpleeter
+
     for instrument in _instruments:
-        predict_model = tf.saved_model.load(model_dir + instrument)
-        inference_func = predict_model.signatures["serving_default"]
-        predictions = inference_func(spectrogram)
-        preds[f'{instrument}_spectrogram'] = predictions[instrument]
+        interpreter = tf.lite.Interpreter(model_dir + instrument+'.tflite')
+        # pdb.set_trace()
+        interpreter.allocate_tensors()
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        interpreter.set_tensor(input_details[0]['index'], spectrogram)
+        interpreter.invoke()
+        # The function `get_tensor()` returns a copy of the tensor data.
+        # Use `tensor()` in order to get a pointer to the tensor.
+        prediction = interpreter.get_tensor(output_details[0]['index'])
+
+        # inference_func = interpreter.get_signature_runner("serving_default")
+        # predictions = inference_func(spectrogram)
+        preds[f'{instrument}_spectrogram'] = prediction
         if(sampleRunToValidateProcessingFlag):
             preds[f'{instrument}_spectrogram'] = predValuesFromOfficialSpleeter
 
