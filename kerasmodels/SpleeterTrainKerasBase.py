@@ -252,10 +252,18 @@ def trainPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0,
 		print("[INFO] new learning rate: {}".format(
 			K.get_value(model.optimizer.lr)))
 
+	pruning_params = {
+      'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=0.50,
+                                                               final_sparsity=0.80,
+                                                               begin_step=0,
+                                                               end_step=end_step)
+	}
+
 	def apply_pruning_to_dense(layer):
 		if isinstance(layer, tf.keras.layers.Conv2D):
-			return tfmot.sparsity.keras.prune_low_magnitude(layer)
+			return tfmot.sparsity.keras.prune_low_magnitude(layer, **pruning_params)
 		return layer
+
 
 	model_for_pruning = tf.keras.models.clone_model(
 		model,
