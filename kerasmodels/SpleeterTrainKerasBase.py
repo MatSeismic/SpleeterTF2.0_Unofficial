@@ -273,6 +273,10 @@ def trainPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0,
 
 	model_for_pruning.summary()
 
+	model_for_pruning.compile(
+		loss=custom_loss, optimizer=opt, metrics=[dice_coefficient]
+	)
+
 
 	# build the path to the training plot and training history
 	plotPath = "./kerasmodels/plots/resnet_fashion_mnist.png"
