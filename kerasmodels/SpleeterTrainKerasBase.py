@@ -252,6 +252,7 @@ def trainPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0,
 		print("[INFO] new learning rate: {}".format(
 			K.get_value(model.optimizer.lr)))
 
+	end_step = 5*64
 	pruning_params = {
       'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=0.50,
                                                                final_sparsity=0.80,
