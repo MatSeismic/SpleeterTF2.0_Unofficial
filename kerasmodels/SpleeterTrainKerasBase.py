@@ -311,6 +311,90 @@ def trainPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0,
 
 	return model_for_pruning
 
+def trainXNNPrunedModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, modelPath=None, learningRate=0):
+
+	global opt
+	if(learningRate==0):
+		learningRate = INIT_LR
+	# if there is no specific model checkpoint supplied, then initialize
+	# the network and compile the model
+	if modelPath is None:
+		print("[INFO] compiling model...")
+		model = getUnetModel("vocals")
+		model.compile(loss=custom_loss, optimizer=opt,
+			metrics=[dice_coefficient])
+	# otherwise, we're using a checkpoint model
+	else:
+		# load the checkpoint from disk
+		print("[INFO] loading {}...".format(modelPath))
+		model = load_model(modelPath, custom_objects={"loss":custom_loss, "metrics":dice_coefficient}, compile=False)
+		model.compile(loss=custom_loss, optimizer=opt,
+					  metrics=[dice_coefficient])
+
+		K.set_value(model.optimizer.lr, learningRate)
+		print("[INFO] new learning rate: {}".format(
+			K.get_value(model.optimizer.lr)))
+
+	end_step = 5*64
+	pruning_params = {
+      	'pruning_schedule': tfmot.sparsity.keras.PolynomialDecay(initial_sparsity=0.50,
+                                                               final_sparsity=0.80,
+                                                               begin_step=0,
+                                                               end_step=end_step)
+		'pruning_policy': tfmot.sparsity.keras.PruneForLatencyOnXNNPack()
+	}
+
+	def apply_pruning_to_dense(layer):
+		if isinstance(layer, tf.keras.layers.Conv2D):
+			return tfmot.sparsity.keras.prune_low_magnitude(layer, **pruning_params)
+		return layer
+
+
+	model_for_pruning = tf.keras.models.clone_model(
+		model,
+		clone_function=apply_pruning_to_dense,
+	)
+
+	model_for_pruning.summary()
+
+	model_for_pruning.compile(
+		loss=custom_loss, optimizer=opt, metrics=[dice_coefficient]
+	)
+
+
+	# build the path to the training plot and training history
+	plotPath = "./kerasmodels/plots/resnet_fashion_mnist.png"
+	jsonPath = "./kerasmodels/plots/resnet_fashion_mnist.json"
+
+	log_dir = './logs/'
+	# construct the set of callbacks
+	callbacks = [
+		EpochCheckpoint(checkPointPath, every=saveModelEvery,
+			startAt=startEpochVal),
+		TrainingMonitor(plotPath,
+			jsonPath=jsonPath,
+			startAt=startEpochVal),
+		tfmot.sparsity.keras.UpdatePruningStep(),
+		# Log sparsity and other metrics in Tensorboard.
+		tfmot.sparsity.keras.PruningSummaries(log_dir=log_dir)
+		]
+
+
+	input_ds = get_training_dataset(params, audio_adapter, audio_path )
+	test_ds = get_validation_dataset(params, audio_adapter, audio_path)
+
+	model_for_pruning.fit_generator(
+		input_ds,
+		validation_data=test_ds,
+		steps_per_epoch=64,
+		epochs=noOfEpochs,
+		callbacks=callbacks,
+		verbose=1)
+
+	print(100)
+
+	return model_for_pruning
+
 def trainQATModelOverEpochs(noOfEpochs=20, saveModelEvery=5, startEpochVal=0, modelPath=None, learningRate=0):
 
 	global opt
