@@ -19,8 +19,8 @@ model_dir = './spleeter_saved_model_dir/5000_3112/'  # location of the model
 # model_dir = 'F:\\trainedSpleeterModels\\models\\vocal_clustered_16_10\\'  # location of the model
 # model_dir = 'F:\\gitrepos\\spleeter-tflite-convert\\export_dir\\2stem\\'
 
-input_audio_file = './input/AClassicEducation.wav' # location of the input file
-output_destination = './output/' #location of the output destination
+input_audio_file = './sample_dataset/mixture.wav' # location of the input file
+output_destination = './sample_dataset/' #location of the output destination
 
 #To ensure the processing are happenning properly, output prediction values of official spleeter model have been saved as npy file here and is being used here
 #run this file with 'sampleRunToValidateProcessingFlag' as 'True' to check the processing.
@@ -223,8 +223,8 @@ def separate(waveform, audio_descriptor):
         inference_func = predict_model.signatures["serving_default"]
         predictions = inference_func(spectrogram)
         # pdb.set_trace()
-        preds[f'{instrument}_spectrogram'] = predictions[instrument]
-        # preds[f'{instrument}_spectrogram'] = predictions[f'{instrument}_spectrogram']
+        # preds[f'{instrument}_spectrogram'] = predictions[instrument]
+        preds[f'{instrument}_spectrogram'] = predictions[f'{instrument}_spectrogram']
         if(sampleRunToValidateProcessingFlag):
             preds[f'{instrument}_spectrogram'] = predValuesFromOfficialSpleeter
 
@@ -247,7 +247,7 @@ def separate(waveform, audio_descriptor):
 waveform, sample_rate = audio_adapter.load(
             input_audio_file,
             offset=0,
-            duration=5,
+            duration=15,
             sample_rate=44100)
 
 sources = separate(waveform, input_audio_file)

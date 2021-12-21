@@ -1,2 +1,5 @@
 .vscode
 tempoutputs/
+.ipynb
+sample_dataset/
+.wav
